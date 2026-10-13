@@ -109,6 +109,10 @@ h2 { margin: 0 0 12px; font-size: 1.1rem; display: flex; gap: 8px; align-items: 
   filter: drop-shadow(0 8px 12px rgba(0, 0, 0, .15));
 }
 .pet.bump { animation: bump .5s ease; }
+/* final stage: the legendary dragon glows */
+.legend {
+  filter: drop-shadow(0 0 10px #f5b301) drop-shadow(0 0 22px #ff5ca8) drop-shadow(0 0 34px #7c5cff);
+}
 .pet-name { color: var(--muted); font-size: .9rem; margin-top: 6px; }
 @keyframes float { 50% { transform: translateY(-8px); } }
 @keyframes bump {

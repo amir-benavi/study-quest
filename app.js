@@ -17,7 +17,10 @@ const STAGES = [
   { lvl: 2, e: '🐣', n: 'אפרוח בוקע' },
   { lvl: 3, e: '🐥', n: 'אפרוח' },
   { lvl: 5, e: '🐔', n: 'תרנגול' },
-  { lvl: 8, e: '🐉', n: 'דרקון' },
+  { lvl: 7, e: '🦅', n: 'נשר' },
+  { lvl: 9, e: '🦖', n: 'דינוזאור' },
+  { lvl: 12, e: '🐉', n: 'דרקון' },
+  { lvl: 15, e: '🐉', n: 'דרקון אגדי', legend: true },
 ];
 
 const xpNeeded = lvl => 50 + 25 * (lvl - 1);
@@ -42,7 +45,8 @@ const ACH = [
   { id: 'courses', ic: '📚', nm: 'רב-תחומי',   ds: 'משימות ב-3 קורסים שונים',      test: s => s.stats.courses.length >= 3 },
   { id: 'owl',     ic: '🦉', nm: 'ינשוף לילה', ds: 'משימה בין חצות ל-5 בבוקר',     test: s => s.stats.owl >= 1 },
   { id: 'lvl5',    ic: '🐔', nm: 'רמה 5',      ds: 'הגעת לרמה 5',                  test: s => levelInfo(s.xp).level >= 5 },
-  { id: 'dragon',  ic: '🐉', nm: 'דרקון!',     ds: 'הגעת לרמה 8',                  test: s => levelInfo(s.xp).level >= 8 },
+  { id: 'dragon',  ic: '🐉', nm: 'דרקון!',     ds: 'הגעת לרמה 12',                 test: s => levelInfo(s.xp).level >= 12 },
+  { id: 'legend',  ic: '✨', nm: 'אגדה',       ds: 'הגעת לרמה 15',                 test: s => levelInfo(s.xp).level >= 15 },
 ];
 
 // what the pet says when a task is done: difficulty-specific lines mixed with general ones
@@ -252,13 +256,14 @@ function renderStats() {
 
   const st = stageFor(level);
   $('#pet').textContent = st.e;
+  $('#pet').classList.toggle('legend', !!st.legend);
   $('#petName').textContent = st.n;
 
   const nx = nextStage(level);
   const left = nx ? nx.lvl - level : 0;
   $('#nextEvo').textContent = !nx ? 'הגעת לשלב הסופי! 🏆'
-    : left === 1 ? `עוד רמה אחת להתפתחות הבאה ${nx.e}`
-    : `עוד ${left} רמות להתפתחות הבאה ${nx.e}`;
+    : left === 1 ? `עוד רמה אחת להתפתחות הבאה: ${nx.n} ${nx.e}`
+    : `עוד ${left} רמות להתפתחות הבאה: ${nx.n} ${nx.e}`;
 
   $('#streak').textContent = currentStreak();
   $('#doneCount').textContent = state.stats.done;
@@ -368,6 +373,7 @@ function fillBarThenLevelUp(then) {
 function showLevelUp(before, after) {
   const oldSt = stageFor(before), newSt = stageFor(after);
   $('#luPet').textContent = newSt.e;
+  $('#luPet').classList.toggle('legend', !!newSt.legend);
   $('#luLevel').textContent = after;
   const nx = nextStage(after);
   $('#luMsg').innerHTML = oldSt !== newSt
