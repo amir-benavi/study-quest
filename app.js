@@ -2,6 +2,8 @@
 
 const $ = s => document.querySelector(s);
 const STORE = 'studyquest-v1';
+const HOUR = 36e5, DAY = 24 * HOUR;
+const EARLY_BONUS = 1.5; // XP multiplier for finishing more than a day before the deadline
 
 // ---------- game rules ----------
 const DIFF = {
@@ -33,6 +35,8 @@ const ACH = [
   { id: 'five',    ic: '🖐️', nm: 'חמישייה',    ds: '5 משימות הושלמו',              test: s => s.stats.done >= 5 },
   { id: 'ten',     ic: '🏅', nm: 'מכונה',      ds: '10 משימות הושלמו',             test: s => s.stats.done >= 10 },
   { id: 'hard',    ic: '💪', nm: 'אומץ',       ds: 'השלמת משימה קשה',              test: s => s.stats.hard >= 1 },
+  { id: 'early',   ic: '⏱️', nm: 'מקדימים',    ds: 'סיום יותר מיום לפני הדדליין',  test: s => s.stats.early >= 1 },
+  { id: 'moodle',  ic: '🔗', nm: 'מחוברים',    ds: 'ייבוא מטלות מ-Moodle',         test: s => s.stats.imported >= 1 },
   { id: 'combo',   ic: '⚡', nm: 'קומבו',      ds: '3 משימות תוך 5 דקות',          test: s => s.stats.combo >= 3 },
   { id: 'streak3', ic: '🔥', nm: 'על הגל',     ds: 'רצף של 3 ימים',                test: s => currentStreak() >= 3 },
   { id: 'courses', ic: '📚', nm: 'רב-תחומי',   ds: 'משימות ב-3 קורסים שונים',      test: s => s.stats.courses.length >= 3 },
@@ -83,23 +87,51 @@ const QUOTES = {
     'עוד אחת והמלגה בדרך (אולי) 💸',
     'אני מתפתח בזכותכם! 🥹',
   ],
+  early: [
+    'הגשה מוקדמת?! מי אתם?! 😱',
+    'בונוס ×1.5! המתרגל בהלם ⚡',
+    'הדדליין עוד ישן, ואתם כבר סיימתם 😴',
+    'ככה נראית תוכנית עבודה 📅',
+    'מוקדם זה הזמן החדש 🏎️',
+  ],
+  late: [
+    'עדיף מאוחר מאשר אף פעם 🙂',
+    'הוגש! זה מה שחשוב',
+    'בפעם הבאה ננצח את הדדליין ⏰',
+    'סוף טוב, הכול טוב 🫡',
+  ],
 };
 
+// [title, course, difficulty, hours until deadline (null = no deadline)]
 const DEMO = [
-  ['להגיש תרגיל 3', 'אלגוריתמים', 'hard'],
-  ['לקרוא פרק 4', 'מבוא לפסיכולוגיה', 'medium'],
-  ['לצפות בהרצאה 6', 'אינפי 1', 'medium'],
-  ['לשלוח מייל למתרגל', 'אלגוריתמים', 'easy'],
-  ['לחזור על הוכחות למבחן', 'אינפי 1', 'hard'],
-  ['להירשם לקורסי בחירה', 'מנהלה', 'easy'],
-  ['פרויקט גמר – שלב א׳', 'מעבדה בתכנות', 'hard'],
-  ['לסכם את הרצאה 2', 'מבוא לפסיכולוגיה', 'easy'],
+  ['להגיש תרגיל 3', 'אלגוריתמים', 'hard', 72],
+  ['לקרוא פרק 4', 'מבוא לפסיכולוגיה', 'medium', 30],
+  ['לצפות בהרצאה 6', 'אינפי 1', 'medium', null],
+  ['לשלוח מייל למתרגל', 'אלגוריתמים', 'easy', 5],
+  ['לחזור על הוכחות למבחן', 'אינפי 1', 'hard', 9 * 24],
+  ['להירשם לקורסי בחירה', 'מנהלה', 'easy', 20],
+  ['פרויקט גמר – שלב א׳', 'מעבדה בתכנות', 'hard', 14 * 24],
+  ['לסכם את הרצאה 2', 'מבוא לפסיכולוגיה', 'easy', null],
 ];
+
+// ---------- deadlines ----------
+function dueInfo(due) {
+  const ms = due - Date.now();
+  if (ms < 0) return { cls: 'late', text: '⚠️ באיחור' };
+  const h = ms / HOUR, d = Math.round(h / 24), hr = Math.round(h);
+  const text = h < 1 ? `⏰ עוד ${Math.max(1, Math.round(ms / 60000))} דק׳`
+    : h < 48 ? (hr === 1 ? '⏰ עוד שעה' : `⏰ עוד ${hr} שעות`)
+    : `⏰ עוד ${d} ימים`;
+  return { cls: h < 24 ? 'urgent' : h < 72 ? 'soon' : '', text };
+}
+const fmtDue = due => new Date(due).toLocaleString('he-IL', {
+  weekday: 'short', day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit',
+});
 
 // ---------- state ----------
 const fresh = () => ({
   tasks: [], xp: 0, streak: 0, lastDay: null, unlocked: [],
-  stats: { done: 0, hard: 0, owl: 0, combo: 0, courses: [] },
+  stats: { done: 0, hard: 0, owl: 0, combo: 0, early: 0, imported: 0, courses: [] },
   muted: false, theme: null,
 });
 
@@ -173,11 +205,17 @@ function taskEl(t, isNew) {
     <button class="check" aria-label="סמן כבוצע">${t.done ? '✓' : ''}</button>
     <div class="body">
       <div class="t-title"></div>
-      <div class="meta">${t.course ? '<span class="course"></span>' : ''}<span class="badge">${DIFF[t.diff].label} · ${DIFF[t.diff].xp} XP</span></div>
+      <div class="meta">${t.course ? '<span class="course"></span>' : ''}${t.due && !t.done ? '<span class="due"></span>' : ''}<span class="badge">${DIFF[t.diff].label} · ${DIFF[t.diff].xp} XP</span></div>
     </div>
     <button class="del" aria-label="מחק">✕</button>`;
   li.querySelector('.t-title').textContent = t.title;
   if (t.course) li.querySelector('.course').textContent = t.course;
+  if (t.due && !t.done) {
+    const el = li.querySelector('.due');
+    el.dataset.due = t.due;
+    el.title = fmtDue(t.due);
+    paintDue(el);
+  }
   const check = li.querySelector('.check');
   if (t.done) check.disabled = true;
   else check.onclick = () => complete(t.id, li);
@@ -185,8 +223,16 @@ function taskEl(t, isNew) {
   return li;
 }
 
+function paintDue(el) {
+  const { cls, text } = dueInfo(+el.dataset.due);
+  el.className = `due ${cls}`;
+  el.textContent = text;
+}
+
 function renderLists(newId) {
-  const open = state.tasks.filter(t => !t.done);
+  // closest deadline first; tasks without a deadline after them, newest first
+  const open = state.tasks.filter(t => !t.done)
+    .sort((a, b) => (a.due ?? Infinity) - (b.due ?? Infinity) || b.createdAt - a.createdAt);
   const done = state.tasks.filter(t => t.done).sort((a, b) => b.doneAt - a.doneAt);
   $('#openList').replaceChildren(...open.map(t => taskEl(t, t.id === newId)));
   $('#doneList').replaceChildren(...done.map(t => taskEl(t)));
@@ -256,8 +302,10 @@ function toast(ic, title, sub) {
 }
 
 let lastQuotes = [], bubbleTimer;
-function pickQuote(diff) {
-  const pool = [...QUOTES[diff], ...QUOTES.any].filter(q => !lastQuotes.includes(q));
+function pickQuote(kind) {
+  const all = DIFF[kind] ? [...QUOTES[kind], ...QUOTES.any] : QUOTES[kind];
+  const fresh = all.filter(q => !lastQuotes.includes(q));
+  const pool = fresh.length ? fresh : all;
   const q = pool[Math.floor(Math.random() * pool.length)];
   lastQuotes = [q, ...lastQuotes].slice(0, 8);
   return q;
@@ -280,12 +328,12 @@ function bumpPet() {
   setTimeout(() => p.classList.remove('bump'), 500);
 }
 
-function flyXP(fromEl, gain, done) {
+function flyXP(fromEl, gain, bonus, done) {
   const from = fromEl.getBoundingClientRect();
   const bar = $('#xpbar').getBoundingClientRect();
   const f = document.createElement('div');
   f.className = 'fly';
-  f.textContent = `+${gain} XP`;
+  f.textContent = `+${gain} XP${bonus ? ' ⚡' : ''}`;
   const x0 = from.left + from.width / 2, y0 = from.top + from.height / 2;
   f.style.left = `${x0}px`;
   f.style.top = `${y0}px`;
@@ -378,8 +426,11 @@ function checkAchievements() {
   renderAch(fresh.map(a => a.id));
 }
 
-function addTask(title, course, diff) {
-  const t = { id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, title, course, diff, done: false, createdAt: Date.now() };
+function addTask(title, course, diff, due = null, uid = null) {
+  const t = {
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    title, course, diff, due, uid, done: false, createdAt: Date.now(),
+  };
   state.tasks.unshift(t);
   save();
   return t;
@@ -389,8 +440,10 @@ function complete(id, li) {
   const t = state.tasks.find(x => x.id === id);
   if (!t || t.done) return;
   const before = levelInfo(state.xp).level;
-  const gain = DIFF[t.diff].xp;
   const now = Date.now();
+  const early = t.due && t.due - now > DAY;
+  const late = t.due && now > t.due;
+  const gain = Math.round(DIFF[t.diff].xp * (early ? EARLY_BONUS : 1));
 
   t.done = true;
   t.doneAt = now;
@@ -398,6 +451,7 @@ function complete(id, li) {
   const s = state.stats;
   s.done++;
   if (t.diff === 'hard') s.hard++;
+  if (early) s.early++;
   if (new Date().getHours() < 5) s.owl++;
   recent = recent.filter(x => now - x < 5 * 60 * 1000).concat(now);
   s.combo = Math.max(s.combo, recent.length);
@@ -407,10 +461,10 @@ function complete(id, li) {
 
   const after = levelInfo(state.xp).level;
   sfx.ding();
-  say(pickQuote(t.diff));
+  say(pickQuote(early ? 'early' : late ? 'late' : t.diff));
   li.classList.add('completing');
   li.querySelector('.check').textContent = '✓';
-  flyXP(li.querySelector('.check'), gain, () => {
+  flyXP(li.querySelector('.check'), gain, early, () => {
     bumpPet();
     if (after > before) fillBarThenLevelUp(() => showLevelUp(before, after));
     else renderStats();
@@ -429,7 +483,9 @@ function removeTask(id, li) {
 
 function loadDemo() {
   const have = new Set(state.tasks.map(t => t.title));
-  [...DEMO].reverse().forEach(([title, course, diff]) => { if (!have.has(title)) addTask(title, course, diff); });
+  [...DEMO].reverse().forEach(([title, course, diff, hours]) => {
+    if (!have.has(title)) addTask(title, course, diff, hours ? Date.now() + hours * HOUR : null);
+  });
   // pretend we studied yesterday too, so the streak achievement can pop during the demo
   if (currentStreak() === 0) { state.streak = 2; state.lastDay = yesterdayKey(); }
   save();
@@ -442,16 +498,183 @@ function loadDemo() {
 const effectiveTheme = () =>
   state.theme || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
 
+// ---------- Moodle import (.ics calendar export, parsed entirely in the browser) ----------
+function parseIcsDate(v) {
+  const m = v.match(/^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2})?(Z)?)?/);
+  if (!m) return null;
+  const [, y, mo, d, h, mi, s = 0, z] = m;
+  if (h === undefined) return new Date(+y, mo - 1, +d, 23, 59).getTime(); // all-day: end of that day
+  return z ? Date.UTC(+y, mo - 1, +d, +h, +mi, +s) : new Date(+y, mo - 1, +d, +h, +mi, +s).getTime();
+}
+const unescapeIcs = v => v.replace(/\\n/gi, ' ').replace(/\\([,;\\])/g, '$1').trim();
+
+function parseICS(text) {
+  // RFC 5545: long lines are folded onto continuation lines that start with a space or tab
+  const lines = text.replace(/\r\n?/g, '\n').replace(/\n[ \t]/g, '').split('\n');
+  const events = [];
+  let cur = null;
+  for (const raw of lines) {
+    const line = raw.trimEnd();
+    if (line === 'BEGIN:VEVENT') { cur = {}; continue; }
+    if (line === 'END:VEVENT') { if (cur) events.push(cur); cur = null; continue; }
+    if (!cur) continue;
+    const i = line.indexOf(':');
+    if (i < 0) continue;
+    const name = line.slice(0, i).split(';')[0].toUpperCase();
+    const val = line.slice(i + 1);
+    if (name === 'DTSTART') cur.due = parseIcsDate(val);
+    else if (name === 'UID' || name === 'SUMMARY' || name === 'CATEGORIES') cur[name.toLowerCase()] = unescapeIcs(val);
+  }
+  return events.filter(e => e.summary && e.due).map(e => ({
+    uid: e.uid || `${e.summary}@${e.due}`,
+    title: cleanTitle(e.summary),
+    course: (e.categories || '').split(',')[0].trim(),
+    due: e.due,
+    diff: guessDiff(e.summary),
+    opening: /\b(opens|starts)\s*$/i.test(e.summary) || /נפתח/.test(e.summary),
+  }));
+}
+
+// Moodle appends things like "is due" / "closes" to event names
+const cleanTitle = s => s.replace(/\s+(is due|is due to be graded|closes|should be completed)\.?\s*$/i, '').trim();
+
+function guessDiff(title) {
+  if (/מבחן|בחינה|בוחן|exam|midterm|final|פרויקט|project|סמינר|seminar/i.test(title)) return 'hard';
+  if (/תרגיל|מטלה|הגשה|עבודה|exercise|assignment|homework|\bhw\b|\bex\s?\d|quiz|lab/i.test(title)) return 'medium';
+  return 'easy';
+}
+
+let importRows = [];
+
+function openImport() {
+  $('#importPick').hidden = false;
+  $('#importPreview').hidden = true;
+  $('#ipAdd').hidden = true;
+  $('#importModal').hidden = false;
+}
+const closeImport = () => { $('#importModal').hidden = true; };
+
+async function importFile(file) {
+  let events = [];
+  try { events = parseICS(await file.text()); } catch {}
+  if (!events.length) {
+    toast('⚠️', 'לא נמצאו מטלות בקובץ', 'ודאו שזה קובץ יומן (.ics) שיוצא מ-Moodle');
+    return;
+  }
+  showPreview(events);
+}
+
+function showPreview(events) {
+  const known = new Set(state.tasks.map(t => t.uid).filter(Boolean));
+  const now = Date.now();
+  importRows = events
+    .map(e => ({ ...e, exists: known.has(e.uid), past: e.due < now }))
+    .map(e => ({ ...e, checked: !e.exists && !e.past && !e.opening }))
+    .sort((a, b) => a.due - b.due);
+
+  $('#ipList').replaceChildren(...importRows.map((r, i) => {
+    const li = document.createElement('li');
+    li.className = 'ip-row';
+    li.style.setProperty('--hue', hueOf(r.course));
+    li.innerHTML = `
+      <label>
+        <input type="checkbox">
+        <div class="body">
+          <div class="t-title"></div>
+          <div class="meta">${r.course ? '<span class="course"></span>' : ''}<span class="badge"></span></div>
+        </div>
+      </label>
+      <select aria-label="רמת קושי">${Object.entries(DIFF).map(([k, d]) => `<option value="${k}">${d.label}</option>`).join('')}</select>`;
+    li.querySelector('.t-title').textContent = r.title;
+    if (r.course) li.querySelector('.course').textContent = r.course;
+    li.querySelector('.badge').textContent =
+      `📅 ${fmtDue(r.due)}${r.exists ? ' · כבר קיים' : r.past ? ' · עבר' : r.opening ? ' · פתיחה' : ''}`;
+    const cb = li.querySelector('input');
+    cb.checked = r.checked;
+    cb.disabled = r.exists;
+    cb.onchange = () => { r.checked = cb.checked; updateImportSummary(); };
+    const sel = li.querySelector('select');
+    sel.value = r.diff;
+    sel.onchange = () => { r.diff = sel.value; };
+    li.dataset.i = i;
+    return li;
+  }));
+
+  $('#importPick').hidden = true;
+  $('#importPreview').hidden = false;
+  $('#ipAdd').hidden = false;
+  $('#importModal').hidden = false;
+  updateImportSummary();
+}
+
+function updateImportSummary() {
+  const selectable = importRows.filter(r => !r.exists);
+  const n = importRows.filter(r => r.checked).length;
+  $('#ipSummary').textContent = `נמצאו ${importRows.length} אירועים · ${n} נבחרו`;
+  $('#ipToggle').textContent = n < selectable.length ? 'בחר הכול' : 'נקה בחירה';
+  $('#ipToggle').hidden = !selectable.length;
+  $('#ipAdd').textContent = n ? `הוסף ${n} משימות` : 'בחרו משימות';
+  $('#ipAdd').disabled = !n;
+  $('#ipList').querySelectorAll('.ip-row').forEach(li => li.classList.toggle('off', !importRows[li.dataset.i].checked));
+}
+
+function toggleAllImport() {
+  const selectable = importRows.filter(r => !r.exists);
+  const all = selectable.every(r => r.checked);
+  selectable.forEach(r => { r.checked = !all; });
+  $('#ipList').querySelectorAll('.ip-row').forEach(li => { li.querySelector('input').checked = importRows[li.dataset.i].checked; });
+  updateImportSummary();
+}
+
+function confirmImport() {
+  const chosen = importRows.filter(r => r.checked && !r.exists);
+  chosen.forEach(r => addTask(r.title, r.course, r.diff, r.due, r.uid));
+  state.stats.imported += chosen.length;
+  save();
+  closeImport();
+  renderLists();
+  sfx.add();
+  toast('📥', `נוספו ${chosen.length} משימות מ-Moodle`, 'ממוינות לפי הדדליין הקרוב');
+  say('וואו, הרבה עבודה! יאללה מתחילים 💪');
+  checkAchievements();
+  $('#openList').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// drag a calendar file anywhere onto the page
+let dragDepth = 0;
+const hasFiles = e => [...(e.dataTransfer?.types || [])].includes('Files');
+window.addEventListener('dragenter', e => {
+  if (!hasFiles(e)) return;
+  e.preventDefault();
+  dragDepth++;
+  $('#dropOverlay').hidden = false;
+});
+window.addEventListener('dragover', e => { if (hasFiles(e)) e.preventDefault(); });
+window.addEventListener('dragleave', e => {
+  if (!hasFiles(e)) return;
+  if (--dragDepth <= 0) { dragDepth = 0; $('#dropOverlay').hidden = true; }
+});
+window.addEventListener('drop', e => {
+  if (!hasFiles(e)) return;
+  e.preventDefault();
+  dragDepth = 0;
+  $('#dropOverlay').hidden = true;
+  const f = e.dataTransfer.files[0];
+  if (f) importFile(f);
+});
+
 // ---------- wiring ----------
 $('#addForm').addEventListener('submit', e => {
   e.preventDefault();
   const title = $('#title').value.trim();
   if (!title) return;
   const diff = document.querySelector('input[name="diff"]:checked').value;
-  const t = addTask(title, $('#course').value.trim(), diff);
+  const dueVal = $('#due').value;
+  const t = addTask(title, $('#course').value.trim(), diff, dueVal ? new Date(dueVal).getTime() : null);
   renderLists(t.id);
   sfx.add();
   $('#title').value = '';
+  $('#due').value = '';
   $('#title').focus();
 });
 
@@ -467,6 +690,22 @@ $('#resetBtn').onclick = () => {
 };
 $('#luClose').onclick = hideLevelUp;
 $('#levelUp').onclick = e => { if (e.target.id === 'levelUp') hideLevelUp(); };
-document.addEventListener('keydown', e => { if (e.key === 'Escape') hideLevelUp(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { hideLevelUp(); closeImport(); } });
+
+$('#importBtn').onclick = openImport;
+$('#icsFile').onchange = e => { const f = e.target.files[0]; e.target.value = ''; if (f) importFile(f); };
+$('#sampleIcs').onclick = async () => {
+  try {
+    const res = await fetch('demo-moodle.ics');
+    importFile(new File([await res.text()], 'demo-moodle.ics'));
+  } catch { toast('⚠️', 'לא הצלחתי לטעון את קובץ הדוגמה'); }
+};
+$('#ipToggle').onclick = toggleAllImport;
+$('#ipAdd').onclick = confirmImport;
+$('#ipCancel').onclick = closeImport;
+$('#importModal').onclick = e => { if (e.target.id === 'importModal') closeImport(); };
+
+// keep countdowns fresh without re-rendering the list
+setInterval(() => document.querySelectorAll('#openList .due[data-due]').forEach(paintDue), 30000);
 
 render();

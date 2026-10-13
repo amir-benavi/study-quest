@@ -17,6 +17,7 @@
   <header class="topbar">
     <div class="brand">⚔️ <span>StudyQuest</span></div>
     <div class="actions">
+      <button id="importBtn" class="ghost">📥 Moodle</button>
       <button id="demoBtn" class="ghost">✨ מצב הדגמה</button>
       <button id="soundBtn" class="icon" title="צליל">🔊</button>
       <button id="themeBtn" class="icon" title="ערכת צבעים">🌙</button>
@@ -51,6 +52,7 @@
         <input id="title" type="text" placeholder="מה צריך לעשות? למשל: תרגיל 3 באלגוריתמים" maxlength="80" required>
         <input id="course" type="text" placeholder="קורס" list="courses" maxlength="30">
         <datalist id="courses"></datalist>
+        <label class="due-field"><span>⏰ דדליין</span><input id="due" type="datetime-local"></label>
         <div class="diff" role="radiogroup" aria-label="רמת קושי">
           <label class="easy"><input type="radio" name="diff" value="easy" checked><span>קל · 10</span></label>
           <label class="medium"><input type="radio" name="diff" value="medium"><span>בינוני · 25</span></label>
@@ -88,6 +90,32 @@
       <button id="luClose" class="primary">יאללה, ממשיכים!</button>
     </div>
   </div>
+
+  <div id="importModal" class="modal" hidden>
+    <div class="modal-card">
+      <h2>📥 ייבוא מטלות מ-Moodle</h2>
+      <div id="importPick" class="import-pick">
+        <label class="dropzone" for="icsFile">
+          <span class="dz-ic">📅</span>
+          <b>גררו לכאן קובץ יומן (‎.ics‎) או לחצו לבחירה</b>
+          <small>ב-Moodle: יומן ← ייבוא/ייצוא יומנים ← ייצוא יומן</small>
+          <small>הקובץ נקרא רק בדפדפן שלכם ולא נשלח לשום מקום 🔒</small>
+        </label>
+        <input id="icsFile" type="file" accept=".ics,text/calendar" hidden>
+        <button id="sampleIcs" class="link" type="button">אין לכם קובץ? נסו קובץ לדוגמה</button>
+      </div>
+      <div id="importPreview" class="import-preview" hidden>
+        <div class="ip-head"><span id="ipSummary"></span><button id="ipToggle" class="link" type="button"></button></div>
+        <ul id="ipList" class="ip-list"></ul>
+      </div>
+      <div class="modal-actions">
+        <button id="ipCancel" class="ghost" type="button">ביטול</button>
+        <button id="ipAdd" class="primary" type="button" hidden></button>
+      </div>
+    </div>
+  </div>
+
+  <div id="dropOverlay" class="drop-overlay" hidden><div>📅 שחררו כאן את קובץ היומן מ-Moodle</div></div>
 
   <div id="toasts" class="toasts"></div>
 
