@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>StudyQuest</title>
+  <meta name="description" content="לוח משימות לסטודנטים עם XP, רמות ודמות שמתפתחת">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐉</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <canvas id="confetti"></canvas>
+
+  <header class="topbar">
+    <div class="brand">⚔️ <span>StudyQuest</span></div>
+    <div class="actions">
+      <button id="demoBtn" class="ghost">✨ מצב הדגמה</button>
+      <button id="soundBtn" class="icon" title="צליל">🔊</button>
+      <button id="themeBtn" class="icon" title="ערכת צבעים">🌙</button>
+      <button id="resetBtn" class="icon" title="איפוס התקדמות">↺</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="card hero">
+      <div class="pet-wrap">
+        <div id="pet" class="pet">🥚</div>
+        <div id="petName" class="pet-name">ביצה</div>
+      </div>
+      <div class="stats">
+        <div class="level-row">
+          <span class="level">רמה <b id="level">1</b></span>
+          <span id="xpText" class="xp-text">0 / 50 XP</span>
+        </div>
+        <div id="xpbar" class="xpbar"><div id="xpfill" class="xpfill"></div></div>
+        <div class="chips">
+          <div class="chip">🔥 <b id="streak">0</b> ימים ברצף</div>
+          <div class="chip">✅ <b id="doneCount">0</b> הושלמו</div>
+          <div class="chip">⭐ <b id="totalXp">0</b> XP סה״כ</div>
+        </div>
+        <div id="nextEvo" class="next-evo"></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <form id="addForm" class="add-form" autocomplete="off">
+        <input id="title" type="text" placeholder="מה צריך לעשות? למשל: תרגיל 3 באלגוריתמים" maxlength="80" required>
+        <input id="course" type="text" placeholder="קורס" list="courses" maxlength="30">
+        <datalist id="courses"></datalist>
+        <div class="diff" role="radiogroup" aria-label="רמת קושי">
+          <label class="easy"><input type="radio" name="diff" value="easy" checked><span>קל · 10</span></label>
+          <label class="medium"><input type="radio" name="diff" value="medium"><span>בינוני · 25</span></label>
+          <label class="hard"><input type="radio" name="diff" value="hard"><span>קשה · 50</span></label>
+        </div>
+        <button class="primary" type="submit">הוסף משימה</button>
+      </form>
+    </section>
+
+    <section class="card">
+      <h2>משימות פתוחות <span id="openCount" class="count"></span></h2>
+      <ul id="openList" class="tasks"></ul>
+      <p id="emptyOpen" class="empty">אין משימות פתוחות 🎉 הוסיפו משימה או לחצו על "מצב הדגמה"</p>
+    </section>
+
+    <section class="card">
+      <h2>הישגים <span id="achCount" class="count"></span></h2>
+      <div id="achGrid" class="ach-grid"></div>
+    </section>
+
+    <section class="card">
+      <details>
+        <summary>משימות שהושלמו (<span id="doneListCount">0</span>)</summary>
+        <ul id="doneList" class="tasks done"></ul>
+      </details>
+    </section>
+  </main>
+
+  <div id="levelUp" class="levelup" hidden>
+    <div class="lu-card">
+      <div class="lu-title">LEVEL UP!</div>
+      <div id="luPet" class="lu-pet"></div>
+      <div class="lu-level">רמה <b id="luLevel"></b></div>
+      <div id="luMsg" class="lu-msg"></div>
+      <button id="luClose" class="primary">יאללה, ממשיכים!</button>
+    </div>
+  </div>
+
+  <div id="toasts" class="toasts"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
