@@ -307,6 +307,10 @@ details .tasks { margin-top: 12px; }
   border: 1px solid var(--border); border-radius: 12px; background: var(--bg); transition: opacity .15s;
 }
 .ip-row.off { opacity: .5; }
+.ip-divider {
+  margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border);
+  color: var(--muted); font-size: .85rem; font-weight: 600;
+}
 .ip-row label { display: flex; gap: 10px; align-items: center; flex: 1; min-width: 0; cursor: pointer; }
 .ip-row input { flex: none; width: 18px; height: 18px; accent-color: var(--accent); }
 .ip-row select {

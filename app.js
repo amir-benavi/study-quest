@@ -506,7 +506,11 @@ function parseIcsDate(v) {
   if (h === undefined) return new Date(+y, mo - 1, +d, 23, 59).getTime(); // all-day: end of that day
   return z ? Date.UTC(+y, mo - 1, +d, +h, +mi, +s) : new Date(+y, mo - 1, +d, +h, +mi, +s).getTime();
 }
-const unescapeIcs = v => v.replace(/\\n/gi, ' ').replace(/\\([,;\\])/g, '$1').trim();
+// Moodle double-encodes: ICS escapes (\, \;) around HTML entities (&amp;)
+const decodeEntities = v => v
+  .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(+n))
+  .replace(/&(amp|lt|gt|quot|apos);/g, (_, e) => ({ amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" })[e]);
+const unescapeIcs = v => decodeEntities(v.replace(/\\n/gi, ' ').replace(/\\([,;\\])/g, '$1')).trim();
 
 function parseICS(text) {
   // RFC 5545: long lines are folded onto continuation lines that start with a space or tab
@@ -525,22 +529,38 @@ function parseICS(text) {
     if (name === 'DTSTART') cur.due = parseIcsDate(val);
     else if (name === 'UID' || name === 'SUMMARY' || name === 'CATEGORIES') cur[name.toLowerCase()] = unescapeIcs(val);
   }
-  return events.filter(e => e.summary && e.due).map(e => ({
-    uid: e.uid || `${e.summary}@${e.due}`,
-    title: cleanTitle(e.summary),
-    course: (e.categories || '').split(',')[0].trim(),
-    due: e.due,
-    diff: guessDiff(e.summary),
-    opening: /\b(opens|starts)\s*$/i.test(e.summary) || /נפתח/.test(e.summary),
-  }));
+  return events.filter(e => e.summary && e.due).map(e => {
+    const rawCourse = (e.categories || '').split(',')[0].trim();
+    return {
+      uid: e.uid || `${e.summary}@${e.due}`,
+      title: cleanTitle(e.summary),
+      course: cleanCourse(rawCourse),
+      due: e.due,
+      diff: guessDiff(e.summary),
+      kind: eventKind(e.summary, rawCourse),
+    };
+  });
 }
 
-// Moodle appends things like "is due" / "closes" to event names
+// Moodle appends the event type to the activity name: "Lab 1 is due", "Quiz 2 closes"
 const cleanTitle = s => s.replace(/\s+(is due|is due to be graded|closes|should be completed)\.?\s*$/i, '').trim();
+// HUJI course categories look like "67723-תכנות עם סוכני AI": drop the course number
+const cleanCourse = c => (/^site events$/i.test(c) ? '' : c.replace(/^\d+\s*-\s*/, '').trim());
+
+// Only real deadlines get pre-selected: "is due" (assignments) and "closes" (quizzes).
+// Openings, attendance sessions and site-wide events are calendar noise, not tasks.
+function eventKind(summary, course) {
+  if (/\b(opens|starts)\s*$/i.test(summary) || /נפתח/.test(summary)) return 'opening';
+  if (/attendance|נוכחות/i.test(summary)) return 'attendance';
+  if (/^site events$/i.test(course)) return 'site';
+  return 'deadline';
+}
+const KIND_LABEL = { opening: 'פתיחה', attendance: 'נוכחות', site: 'אירוע כללי' };
 
 function guessDiff(title) {
-  if (/מבחן|בחינה|בוחן|exam|midterm|final|פרויקט|project|סמינר|seminar/i.test(title)) return 'hard';
-  if (/תרגיל|מטלה|הגשה|עבודה|exercise|assignment|homework|\bhw\b|\bex\s?\d|quiz|lab/i.test(title)) return 'medium';
+  if (/מבחן|בחינה|אמצע|exam|midterm|final|פרויקט|project|סמינר|seminar/i.test(title)) return 'hard';
+  if (/quiz|בוחן/i.test(title)) return 'easy'; // weekly Moodle quizzes are short
+  if (/תרגיל|מטלה|הגשה|עבודה|exercise|assignment|homework|submission|report|\bhw\b|\bex\b|lab/i.test(title)) return 'medium';
   return 'easy';
 }
 
@@ -567,12 +587,13 @@ async function importFile(file) {
 function showPreview(events) {
   const known = new Set(state.tasks.map(t => t.uid).filter(Boolean));
   const now = Date.now();
+  // upcoming deadlines on top (pre-selected); openings, attendance, site events and past ones below
   importRows = events
-    .map(e => ({ ...e, exists: known.has(e.uid), past: e.due < now }))
-    .map(e => ({ ...e, checked: !e.exists && !e.past && !e.opening }))
-    .sort((a, b) => a.due - b.due);
+    .map(e => ({ ...e, exists: known.has(e.uid), main: e.kind === 'deadline' && e.due >= now }))
+    .map(e => ({ ...e, checked: e.main && !e.exists }))
+    .sort((a, b) => b.main - a.main || a.due - b.due);
 
-  $('#ipList').replaceChildren(...importRows.map((r, i) => {
+  const items = importRows.map((r, i) => {
     const li = document.createElement('li');
     li.className = 'ip-row';
     li.style.setProperty('--hue', hueOf(r.course));
@@ -587,8 +608,8 @@ function showPreview(events) {
       <select aria-label="רמת קושי">${Object.entries(DIFF).map(([k, d]) => `<option value="${k}">${d.label}</option>`).join('')}</select>`;
     li.querySelector('.t-title').textContent = r.title;
     if (r.course) li.querySelector('.course').textContent = r.course;
-    li.querySelector('.badge').textContent =
-      `📅 ${fmtDue(r.due)}${r.exists ? ' · כבר קיים' : r.past ? ' · עבר' : r.opening ? ' · פתיחה' : ''}`;
+    const note = r.exists ? 'כבר קיים' : KIND_LABEL[r.kind] || (r.due < now ? 'עבר' : '');
+    li.querySelector('.badge').textContent = `📅 ${fmtDue(r.due)}${note ? ` · ${note}` : ''}`;
     const cb = li.querySelector('input');
     cb.checked = r.checked;
     cb.disabled = r.exists;
@@ -598,7 +619,16 @@ function showPreview(events) {
     sel.onchange = () => { r.diff = sel.value; };
     li.dataset.i = i;
     return li;
-  }));
+  });
+
+  const firstOther = importRows.findIndex(r => !r.main);
+  if (firstOther >= 0) {
+    const divider = document.createElement('li');
+    divider.className = 'ip-divider';
+    divider.textContent = `לא דדליינים או שכבר עברו (${importRows.length - firstOther})`;
+    items.splice(firstOther, 0, divider);
+  }
+  $('#ipList').replaceChildren(...items);
 
   $('#importPick').hidden = true;
   $('#importPreview').hidden = false;
@@ -608,20 +638,20 @@ function showPreview(events) {
 }
 
 function updateImportSummary() {
-  const selectable = importRows.filter(r => !r.exists);
+  const deadlines = importRows.filter(r => r.main && !r.exists);
   const n = importRows.filter(r => r.checked).length;
-  $('#ipSummary').textContent = `נמצאו ${importRows.length} אירועים · ${n} נבחרו`;
-  $('#ipToggle').textContent = n < selectable.length ? 'בחר הכול' : 'נקה בחירה';
-  $('#ipToggle').hidden = !selectable.length;
+  $('#ipSummary').textContent = `${importRows.filter(r => r.main).length} דדליינים מתוך ${importRows.length} אירועים · ${n} נבחרו`;
+  $('#ipToggle').textContent = deadlines.every(r => r.checked) ? 'נקה בחירה' : 'בחר את כל הדדליינים';
+  $('#ipToggle').hidden = !deadlines.length;
   $('#ipAdd').textContent = n ? `הוסף ${n} משימות` : 'בחרו משימות';
   $('#ipAdd').disabled = !n;
   $('#ipList').querySelectorAll('.ip-row').forEach(li => li.classList.toggle('off', !importRows[li.dataset.i].checked));
 }
 
 function toggleAllImport() {
-  const selectable = importRows.filter(r => !r.exists);
-  const all = selectable.every(r => r.checked);
-  selectable.forEach(r => { r.checked = !all; });
+  const deadlines = importRows.filter(r => r.main && !r.exists);
+  const all = deadlines.every(r => r.checked);
+  importRows.forEach(r => { r.checked = !all && r.main && !r.exists; });
   $('#ipList').querySelectorAll('.ip-row').forEach(li => { li.querySelector('input').checked = importRows[li.dataset.i].checked; });
   updateImportSummary();
 }
