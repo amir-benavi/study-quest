@@ -82,7 +82,24 @@ h2 { margin: 0 0 12px; font-size: 1.1rem; display: flex; gap: 8px; align-items: 
 
 /* ---------- hero: pet + xp ---------- */
 .hero { display: flex; gap: 20px; align-items: center; }
-.pet-wrap { text-align: center; flex: none; width: 120px; }
+.pet-wrap { text-align: center; flex: none; width: 120px; position: relative; }
+
+/* speech bubble: the pet cheers you on */
+.bubble {
+  position: absolute; z-index: 5; top: 64px; inset-inline-start: calc(100% + 4px);
+  width: max-content; max-width: 260px; padding: 10px 14px;
+  background: var(--card); border: 2px solid var(--accent); border-radius: 16px;
+  font-weight: 600; font-size: .95rem; text-align: start;
+  box-shadow: 0 10px 30px color-mix(in srgb, var(--accent) 25%, transparent);
+  opacity: 0; transform: scale(.6); transform-origin: right center; pointer-events: none;
+  transition: opacity .2s, transform .35s cubic-bezier(.3, 1.6, .5, 1);
+}
+.bubble::before {
+  content: ''; position: absolute; top: 16px; inset-inline-start: -8px;
+  width: 12px; height: 12px; background: var(--card);
+  border: 2px solid var(--accent); border-width: 2px 2px 0 0; transform: rotate(45deg);
+}
+.bubble.show { opacity: 1; transform: scale(1); }
 .pet {
   display: inline-block; font-size: 84px; line-height: 1;
   animation: float 3s ease-in-out infinite;
@@ -197,7 +214,7 @@ details .tasks { margin-top: 12px; }
 /* ---------- effects ---------- */
 .fly {
   position: fixed; z-index: 70; pointer-events: none; white-space: nowrap;
-  font-weight: 800; font-size: 1.2rem; color: var(--accent);
+  font-weight: 800; font-size: 1.2rem; color: var(--accent); direction: ltr;
   text-shadow: 0 2px 8px rgba(0, 0, 0, .15);
 }
 #confetti { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 80; }
@@ -243,6 +260,14 @@ details .tasks { margin-top: 12px; }
 @media (max-width: 560px) {
   .hero { flex-direction: column; text-align: center; gap: 8px; }
   .stats { width: 100%; }
+  .bubble {
+    top: calc(100% + 6px); inset-inline-start: 50%; translate: 50% 0;
+    max-width: min(260px, 80vw); text-align: center; transform-origin: center top;
+  }
+  .bubble::before {
+    top: -8px; inset-inline-start: calc(50% - 6px);
+    border-width: 2px 0 0 2px;
+  }
   .chips { justify-content: center; }
   .add-form { grid-template-columns: 1fr; }
   .brand { font-size: 1.2rem; }

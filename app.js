@@ -41,6 +41,50 @@ const ACH = [
   { id: 'dragon',  ic: '🐉', nm: 'דרקון!',     ds: 'הגעת לרמה 8',                  test: s => levelInfo(s.xp).level >= 8 },
 ];
 
+// what the pet says when a task is done: difficulty-specific lines mixed with general ones
+const QUOTES = {
+  easy: [
+    'קטן אבל סופר ✔️',
+    'צעד קטן לסטודנט, צעד ענק לממוצע',
+    'ככה בונים מומנטום 🚀',
+    'וי קטן, דופמין גדול',
+    'עוד אחת ירדה מהרשימה 👋',
+    'קל? אולי. נספר? בהחלט.',
+    'גם משימות קטנות בונות דרקונים 🐉',
+    'יפה! עכשיו הבאה בתור',
+  ],
+  medium: [
+    'יציב! ככה עוברים סמסטר 📈',
+    'חצי דרך לגאונות 🧠',
+    'ה-XP הזה הרגיש טוב, נכון?',
+    'המרצה היה גאה (כנראה) 🎓',
+    'עבודה רצינית, תוצאות רציניות',
+    'עוד משימה פחות, עוד קפה יותר ☕',
+    'הממוצע מחייך עכשיו 😊',
+    'קצב מעולה, לא לעצור!',
+  ],
+  hard: [
+    'זה היה בוס! 💪',
+    'וואו. פשוט וואו. 🔥',
+    'המשימה הזאת לא ידעה עם מי היא מתעסקת',
+    'אגדה. אין מילה אחרת. 🏆',
+    'זה שווה הפסקת קפה מוצדקת ☕',
+    'הדרקון הפנימי מתעורר 🐉',
+    'מבחן? איזה מבחן? 😎',
+    'את זה אפשר לשים בקורות חיים',
+  ],
+  any: [
+    'המוח עושה כפיפות בטן 🧠',
+    'אתם-של-העתיד שולחים תודה 🙏',
+    'דדליין? מה זה? 😌',
+    'ככה בונים ממוצע 90+',
+    'פרוקרסטינציה: 0, אתם: 1',
+    'הספרייה גאה בכם 📚',
+    'עוד אחת והמלגה בדרך (אולי) 💸',
+    'אני מתפתח בזכותכם! 🥹',
+  ],
+};
+
 const DEMO = [
   ['להגיש תרגיל 3', 'אלגוריתמים', 'hard'],
   ['לקרוא פרק 4', 'מבוא לפסיכולוגיה', 'medium'],
@@ -211,6 +255,23 @@ function toast(ic, title, sub) {
   setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 300); }, 3200);
 }
 
+let lastQuotes = [], bubbleTimer;
+function pickQuote(diff) {
+  const pool = [...QUOTES[diff], ...QUOTES.any].filter(q => !lastQuotes.includes(q));
+  const q = pool[Math.floor(Math.random() * pool.length)];
+  lastQuotes = [q, ...lastQuotes].slice(0, 8);
+  return q;
+}
+function say(text) {
+  const b = $('#bubble');
+  b.textContent = text;
+  b.classList.remove('show');
+  void b.offsetWidth;
+  b.classList.add('show');
+  clearTimeout(bubbleTimer);
+  bubbleTimer = setTimeout(() => b.classList.remove('show'), 3500);
+}
+
 function bumpPet() {
   const p = $('#pet');
   p.classList.remove('bump');
@@ -261,8 +322,8 @@ function showLevelUp(before, after) {
   $('#luPet').textContent = newSt.e;
   $('#luLevel').textContent = after;
   const nx = nextStage(after);
-  $('#luMsg').textContent = oldSt !== newSt
-    ? `${oldSt.e} ← ${newSt.e}  התפתחות! עכשיו את/ה ${newSt.n}`
+  $('#luMsg').innerHTML = oldSt !== newSt
+    ? `<div dir="ltr">${oldSt.e} ➜ ${newSt.e}</div>התפתחות! עכשיו את/ה ${newSt.n}`
     : nx ? `עוד קצת ותהפכו ל${nx.n} ${nx.e}` : 'אגדה 🏆';
   $('#levelUp').hidden = false;
   confetti();
@@ -346,6 +407,7 @@ function complete(id, li) {
 
   const after = levelInfo(state.xp).level;
   sfx.ding();
+  say(pickQuote(t.diff));
   li.classList.add('completing');
   li.querySelector('.check').textContent = '✓';
   flyXP(li.querySelector('.check'), gain, () => {
