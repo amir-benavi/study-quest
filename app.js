@@ -23,7 +23,8 @@ const STAGES = [
   { lvl: 15, e: '🐉', n: 'דרקון אגדי', legend: true },
 ];
 
-const xpNeeded = lvl => 50 + 25 * (lvl - 1);
+// XP to go from level lvl to lvl+1: 60, 95, 130, ... (about 35% more total than before)
+const xpNeeded = lvl => 60 + 35 * (lvl - 1);
 
 function levelInfo(xp) {
   let level = 1;
