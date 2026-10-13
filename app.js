@@ -318,6 +318,9 @@ function pickQuote(kind) {
 function say(text) {
   const b = $('#bubble');
   b.textContent = text;
+  // speak to the right of the pet when the page margin has room, otherwise below it
+  const room = innerWidth - $('.pet-wrap').getBoundingClientRect().right;
+  b.classList.toggle('below', room < 290);
   b.classList.remove('show');
   void b.offsetWidth;
   b.classList.add('show');
